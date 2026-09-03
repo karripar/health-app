@@ -1,26 +1,51 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #090b0a;
+  --surface: #111512;
+  --surface-elevated: #171c18;
+  --border: #242b26;
+  --accent: #39d353;
+  --accent-bright: #55e86a;
+  --accent-dark: #1b7f35;
+  --text-primary: #f2f5f2;
+  --text-secondary: #9aa49d;
+  --text-muted: #626b65;
+  --warning: #e5b84b;
+  --danger: #e05252;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(57, 211, 83, 0.28);
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
 }
