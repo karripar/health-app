@@ -84,6 +84,8 @@ const fallbackFineliFoods: Food[] = [
   },
 ];
 
+let localFineliDatasetCache: Food[] | null = null;
+
 function createId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
 }
@@ -93,10 +95,60 @@ function toNumber(value: unknown) {
     return value;
   }
   if (typeof value === "string") {
-    const parsed = Number(value.replace(",", "."));
+    const normalized = value.replace(/\s+/g, "").replace(",", ".");
+    const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreFoodMatch(food: Food, query: string) {
+  const tokens = normalizeSearchText(query).split(" ").filter(Boolean);
+
+  if (!tokens.length) {
+    return 0;
+  }
+
+  const haystack = normalizeSearchText(`${food.name} ${food.brand ?? ""}`);
+  const name = normalizeSearchText(food.name);
+  const brand = normalizeSearchText(food.brand ?? "");
+
+  let score = 0;
+
+  for (const token of tokens) {
+    if (haystack === token) {
+      score += 30;
+    }
+    if (haystack.startsWith(token)) {
+      score += 16;
+    }
+    if (name.startsWith(token)) {
+      score += 12;
+    }
+    if (name.includes(token)) {
+      score += 10;
+    }
+    if (brand.includes(token)) {
+      score += 8;
+    }
+    if (haystack.includes(token)) {
+      score += 6;
+    }
+  }
+
+  if (name.startsWith(tokens[0])) {
+    score += 4;
+  }
+
+  return score;
 }
 
 function nutritionFromObject(
@@ -156,7 +208,17 @@ function nutritionFromObject(
 }
 
 function normalizeFood(candidate: Record<string, unknown>): Food | null {
-  const nutrition = nutritionFromObject(candidate);
+  const nutritionData =
+    (candidate.nutritionPer100g as Record<string, unknown> | undefined) ??
+    (candidate.nutrition as Record<string, unknown> | undefined) ??
+    candidate;
+
+  const normalizedCandidate = {
+    ...candidate,
+    nutrition: nutritionData,
+  };
+
+  const nutrition = nutritionFromObject(normalizedCandidate);
   if (!nutrition) {
     return null;
   }
@@ -184,30 +246,28 @@ function normalizeFood(candidate: Record<string, unknown>): Food | null {
   };
 }
 
-async function requestCandidates(query: string) {
-  const url = new URL("/api/fineli", window.location.origin);
-  url.searchParams.set("q", query);
-  url.searchParams.set("limit", "12");
-  url.searchParams.set("lang", "en");
+async function loadLocalFineliDataset() {
+  if (localFineliDatasetCache) {
+    return localFineliDatasetCache;
+  }
 
   try {
-    const response = await fetch(url.toString(), {
+    const response = await fetch("/data/fineli-dataset.json", {
       headers: { Accept: "application/json" },
     });
     if (!response.ok) {
       return [];
     }
 
-    const payload = (await response.json()) as Record<string, unknown>;
+    const payload = (await response.json()) as unknown;
+    const source = payload && typeof payload === "object" ? payload : {};
     const items = Array.isArray(payload)
       ? payload
-      : Array.isArray(payload.items)
-        ? payload.items
-        : Array.isArray(payload.results)
-          ? payload.results
-          : Array.isArray(payload.data)
-            ? payload.data
-            : [];
+      : Array.isArray((source as Record<string, unknown>).items)
+        ? ((source as Record<string, unknown>).items as unknown[])
+        : Array.isArray((source as Record<string, unknown>).results)
+          ? ((source as Record<string, unknown>).results as unknown[])
+          : [];
 
     const foods = items
       .flatMap((item) =>
@@ -217,6 +277,7 @@ async function requestCandidates(query: string) {
       )
       .filter((item): item is Food => Boolean(item));
 
+    localFineliDatasetCache = foods;
     return foods;
   } catch {
     return [];
@@ -229,22 +290,40 @@ export async function searchFineliFoods(query: string) {
     return [];
   }
 
-  const normalizedQuery = trimmed.toLowerCase();
-  const matches = fallbackFineliFoods.filter((food) => {
-    const haystack = `${food.name} ${food.brand ?? ""}`.toLowerCase();
-    return haystack.includes(normalizedQuery);
-  });
+  const normalizedQuery = normalizeSearchText(trimmed);
+  const localFoods = await loadLocalFineliDataset();
+  if (localFoods.length) {
+    const ranked = localFoods
+      .map((food) => ({ food, score: scoreFoodMatch(food, normalizedQuery) }))
+      .filter((entry) => entry.score > 0)
+      .sort(
+        (left, right) =>
+          right.score - left.score ||
+          left.food.name.localeCompare(right.food.name),
+      )
+      .map((entry) => entry.food);
 
-  const networkFoods = await requestCandidates(trimmed);
-  if (networkFoods.length) {
-    await saveCachedFoodSearch(trimmed, networkFoods);
-    return networkFoods;
+    if (ranked.length) {
+      const limited = ranked.slice(0, 20);
+      await saveCachedFoodSearch(trimmed, limited);
+      return limited;
+    }
   }
 
   const cached = await loadCachedFoodSearch(trimmed);
   if (cached?.foods?.length) {
-    return cached.foods;
+    return cached.foods.slice(0, 20);
   }
 
-  return matches.length ? matches : [];
+  const fallbackMatches = fallbackFineliFoods
+    .map((food) => ({ food, score: scoreFoodMatch(food, normalizedQuery) }))
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.food.name.localeCompare(right.food.name),
+    )
+    .map((entry) => entry.food);
+
+  return fallbackMatches.length ? fallbackMatches.slice(0, 20) : [];
 }

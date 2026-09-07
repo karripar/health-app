@@ -66,6 +66,7 @@ const labels = {
     foodSearch: "Search foods",
     search: "Search",
     addToToday: "Add to today",
+    remove: "Remove",
     saveFood: "Save food",
     savedFoods: "Saved foods",
     customFood: "Custom food",
@@ -139,7 +140,8 @@ const labels = {
     emptyEntries: "Ruokia ei ole vielä kirjattu.",
     foodSearch: "Hae ruokia",
     search: "Hae",
-    addToToday: "Lisää tänään",
+    addToToday: "Lisää tälle päivälle",
+    remove: "Poista",
     saveFood: "Tallenna ruoka",
     savedFoods: "Tallennetut ruoat",
     customFood: "Oma ruoka",
@@ -207,6 +209,24 @@ function formatSigned(value: number, suffix = "") {
   const rounded = roundTo(value, 1);
   const prefix = rounded > 0 ? "+" : "";
   return `${prefix}${rounded.toLocaleString()}${suffix}`;
+}
+
+function formatFoodDisplayName(name: string) {
+  const value = name.replace(/\s+/g, " ").trim();
+  if (!value) {
+    return value;
+  }
+
+  if (value === value.toUpperCase() && /[A-Z]/.test(value)) {
+    return value
+      .toLowerCase()
+      .replace(
+        /(^|\s|[-/()])([a-z0-9])/g,
+        (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`,
+      );
+  }
+
+  return value;
 }
 
 function mergeFoods(existing: Food[], incoming: Food[]) {
@@ -583,6 +603,15 @@ export function ForgeApp() {
           lastUsedAt: new Date().toISOString(),
         },
       ]);
+      draft.tdeeEstimate = estimateAdaptiveTdee(draft);
+    });
+  };
+
+  const removeFoodFromToday = (entryId: string) => {
+    updateState((draft) => {
+      const log = getTodayLog(draft);
+      log.foodEntries = log.foodEntries.filter((entry) => entry.id !== entryId);
+      upsertTodayLog(draft, log);
       draft.tdeeEstimate = estimateAdaptiveTdee(draft);
     });
   };
@@ -1087,9 +1116,12 @@ export function ForgeApp() {
                     <div>
                       <div className="font-medium">{food.name}</div>
                       <div className="mt-1 text-xs text-(--text-secondary)">
-                        {food.defaultServingGrams} g
+                        {food.defaultServingGrams} g serving
                       </div>
                     </div>
+                    <span className="rounded-md bg-(--accent) px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-black">
+                      {copy.addToToday}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1112,12 +1144,21 @@ export function ForgeApp() {
                           {entry.grams} g
                         </div>
                       </div>
-                      <div className="text-sm text-(--accent)">
-                        {food
-                          ? scaleNutrition(food.nutritionPer100g, entry.grams)
-                              .calories
-                          : 0}{" "}
-                        kcal
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm text-(--accent)">
+                          {food
+                            ? scaleNutrition(food.nutritionPer100g, entry.grams)
+                                .calories
+                            : 0}{" "}
+                          kcal
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFoodFromToday(entry.id)}
+                          className="rounded-md border border-(--border) px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-(--text-muted)"
+                        >
+                          {copy.remove}
+                        </button>
                       </div>
                     </div>
                   ))
@@ -1133,110 +1174,182 @@ export function ForgeApp() {
 
         {activeTab === "food" ? (
           <section className="space-y-5">
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  value={foodQuery}
-                  onChange={(event) => setFoodQuery(event.target.value)}
-                  placeholder={copy.foodSearch}
-                />
-                <Button
-                  className="bg-(--accent) text-black"
-                  onClick={handleSearch}
-                >
-                  {copy.search}
-                </Button>
-              </div>
-              <div className="text-sm text-(--text-secondary)">
-                {searchMessage || copy.noteFineli}
-              </div>
-            </div>
-
-            {selectedFood ? (
-              <div className="space-y-4 border-t border-(--border) pt-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium">{selectedFood.name}</div>
-                    <div className="mt-1 text-sm text-(--text-secondary)">
-                      {selectedFood.nutritionPer100g.calories} kcal / 100g
+            <div className="grid gap-4 lg:grid-cols-[1.35fr_0.95fr]">
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      className="flex-1"
+                      value={foodQuery}
+                      onChange={(event) => setFoodQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          void handleSearch();
+                        }
+                      }}
+                      placeholder={copy.foodSearch}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        className="bg-(--accent) text-black"
+                        onClick={() => void handleSearch()}
+                      >
+                        {copy.search}
+                      </Button>
+                      {foodQuery ? (
+                        <Button
+                          onClick={() => {
+                            setFoodQuery("");
+                            setSearchResults([]);
+                            setSelectedFoodId("");
+                            setSearchMessage("");
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
-                  <Input
-                    className="w-24"
-                    type="number"
-                    value={selectedFoodGrams}
-                    onChange={(event) =>
-                      setSelectedFoodGrams(event.target.value)
-                    }
-                  />
+                  <div className="text-sm text-(--text-secondary)">
+                    {searchMessage || copy.noteFineli}
+                  </div>
                 </div>
-                {selectedFoodNutrition ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <StatCard
-                      label={copy.calories}
-                      value={`${selectedFoodNutrition.calories}`}
-                    />
-                    <StatCard
-                      label={copy.protein}
-                      value={`${selectedFoodNutrition.protein}g`}
-                    />
-                    <StatCard
-                      label={copy.carbs}
-                      value={`${selectedFoodNutrition.carbs}g`}
-                    />
-                    <StatCard
-                      label={copy.fat}
-                      value={`${selectedFoodNutrition.fat}g`}
-                    />
+
+                {searchResults.length ? (
+                  <div className="space-y-3 border-t border-(--border) pt-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium">
+                        {copy.foodSearch}
+                      </div>
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
+                        {searchResults.length} results
+                      </div>
+                    </div>
+                    <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                      {searchResults.slice(0, 12).map((food) => (
+                        <button
+                          key={food.id}
+                          type="button"
+                          onClick={() => setSelectedFoodId(food.id)}
+                          className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${selectedFoodId === food.id ? "border-(--accent) bg-white/3" : "border-(--border) hover:border-(--accent)/70"}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-[15px]">
+                                {formatFoodDisplayName(food.name)}
+                              </div>
+                              {food.brand ? (
+                                <div className="mt-1 text-xs text-(--text-muted)">
+                                  {formatFoodDisplayName(food.brand)}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="shrink-0 rounded-md bg-white/3 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
+                              {food.defaultServingGrams}g
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-(--text-secondary)">
+                            <span>
+                              {food.nutritionPer100g.calories} kcal / 100g
+                            </span>
+                            <span>•</span>
+                            <span>{food.nutritionPer100g.protein}P</span>
+                            <span>•</span>
+                            <span>{food.nutritionPer100g.carbs}C</span>
+                            <span>•</span>
+                            <span>{food.nutritionPer100g.fat}F</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    className="bg-(--accent) text-black"
-                    onClick={() =>
-                      addFoodToToday(
-                        selectedFood,
-                        Number(selectedFoodGrams) ||
-                          selectedFood.defaultServingGrams,
-                      )
-                    }
-                  >
-                    {copy.addToToday}
-                  </Button>
-                  <Button onClick={saveSelectedFood}>{copy.saveFood}</Button>
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    addFoodToMealDraft(selectedFood);
-                    setShowMealBuilder(true);
-                  }}
-                >
-                  {copy.buildMeal}
-                </Button>
               </div>
-            ) : null}
 
-            {searchResults.length ? (
-              <div className="space-y-3 border-t border-(--border) pt-5">
-                <div className="text-sm font-medium">{copy.foodSearch}</div>
-                <div className="space-y-2">
-                  {searchResults.slice(0, 6).map((food) => (
-                    <button
-                      key={food.id}
-                      type="button"
-                      onClick={() => setSelectedFoodId(food.id)}
-                      className={`w-full rounded-lg border px-3 py-3 text-left ${selectedFoodId === food.id ? "border-(--accent) bg-white/3" : "border-(--border)"}`}
-                    >
-                      <div className="font-medium">{food.name}</div>
-                      <div className="mt-1 text-sm text-(--text-secondary)">
-                        {food.nutritionPer100g.calories} kcal / 100g
+              <div className="space-y-4 rounded-xl border border-(--border) bg-white/2 p-4">
+                {selectedFood ? (
+                  <>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
+                        Selected item
                       </div>
-                    </button>
-                  ))}
-                </div>
+                      <div className="mt-2 text-lg font-medium">
+                        {formatFoodDisplayName(selectedFood.name)}
+                      </div>
+                      {selectedFood.brand ? (
+                        <div className="mt-1 text-sm text-(--text-secondary)">
+                          {formatFoodDisplayName(selectedFood.brand)}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm text-(--text-secondary)">
+                        {selectedFood.nutritionPer100g.calories} kcal / 100g
+                      </div>
+                      <Input
+                        className="w-24"
+                        type="number"
+                        value={selectedFoodGrams}
+                        onChange={(event) =>
+                          setSelectedFoodGrams(event.target.value)
+                        }
+                      />
+                    </div>
+                    {selectedFoodNutrition ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <StatCard
+                          label={copy.calories}
+                          value={`${selectedFoodNutrition.calories}`}
+                        />
+                        <StatCard
+                          label={copy.protein}
+                          value={`${selectedFoodNutrition.protein}g`}
+                        />
+                        <StatCard
+                          label={copy.carbs}
+                          value={`${selectedFoodNutrition.carbs}g`}
+                        />
+                        <StatCard
+                          label={copy.fat}
+                          value={`${selectedFoodNutrition.fat}g`}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        className="bg-(--accent) text-black"
+                        onClick={() =>
+                          addFoodToToday(
+                            selectedFood,
+                            Number(selectedFoodGrams) ||
+                              selectedFood.defaultServingGrams,
+                          )
+                        }
+                      >
+                        {`Add ${Number(selectedFoodGrams) || selectedFood.defaultServingGrams} g`}
+                      </Button>
+                      <Button onClick={saveSelectedFood}>
+                        {copy.saveFood}
+                      </Button>
+                    </div>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        addFoodToMealDraft(selectedFood);
+                        setShowMealBuilder(true);
+                      }}
+                    >
+                      {copy.buildMeal}
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-(--text-secondary)">
+                    Choose a food from the results list to preview nutrition and
+                    add it to today.
+                  </div>
+                )}
               </div>
-            ) : null}
+            </div>
 
             <div className="space-y-3 border-t border-(--border) pt-5">
               <div className="text-sm font-medium">{copy.savedFoods}</div>
