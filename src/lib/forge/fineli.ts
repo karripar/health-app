@@ -1,6 +1,89 @@
 import { loadCachedFoodSearch, saveCachedFoodSearch } from "@/lib/forge/db";
 import { type Food, type NutritionFacts } from "@/lib/forge/models";
 
+const fallbackFineliFoods: Food[] = [
+  {
+    id: "fallback-chicken-breast",
+    source: "fineli",
+    name: "Chicken breast",
+    defaultServingGrams: 150,
+    nutritionPer100g: { calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-chicken-thigh",
+    source: "fineli",
+    name: "Chicken thigh",
+    defaultServingGrams: 150,
+    nutritionPer100g: { calories: 209, protein: 26, carbs: 0, fat: 11 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-chicken-drumstick",
+    source: "fineli",
+    name: "Chicken drumstick",
+    defaultServingGrams: 150,
+    nutritionPer100g: { calories: 184, protein: 24, carbs: 0, fat: 8.5 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-chicken-ground",
+    source: "fineli",
+    name: "Ground chicken",
+    defaultServingGrams: 100,
+    nutritionPer100g: { calories: 197, protein: 19, carbs: 0, fat: 12 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-egg",
+    source: "fineli",
+    name: "Egg",
+    defaultServingGrams: 100,
+    nutritionPer100g: { calories: 155, protein: 13, carbs: 1.1, fat: 11 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-yogurt",
+    source: "fineli",
+    name: "Greek yogurt",
+    defaultServingGrams: 200,
+    nutritionPer100g: { calories: 59, protein: 10, carbs: 3.6, fat: 0.4 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-rice",
+    source: "fineli",
+    name: "White rice",
+    defaultServingGrams: 150,
+    nutritionPer100g: { calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-oats",
+    source: "fineli",
+    name: "Oats",
+    defaultServingGrams: 40,
+    nutritionPer100g: { calories: 389, protein: 16.9, carbs: 66.3, fat: 6.9 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-banana",
+    source: "fineli",
+    name: "Banana",
+    defaultServingGrams: 120,
+    nutritionPer100g: { calories: 89, protein: 1.1, carbs: 22.8, fat: 0.3 },
+    usageCount: 0,
+  },
+  {
+    id: "fallback-salmon",
+    source: "fineli",
+    name: "Salmon",
+    defaultServingGrams: 150,
+    nutritionPer100g: { calories: 208, protein: 20, carbs: 0, fat: 13 },
+    usageCount: 0,
+  },
+];
+
 function createId(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
 }
@@ -102,55 +185,42 @@ function normalizeFood(candidate: Record<string, unknown>): Food | null {
 }
 
 async function requestCandidates(query: string) {
-  const endpoints = [
-    ["https://fineli.fi/fineli/api/v1/foods", ["search", query]],
-    ["https://fineli.fi/fineli/api/v1/foods", ["q", query]],
-    ["https://fineli.fi/fineli/api/v1/food-items", ["search", query]],
-    ["https://fineli.fi/fineli/api/v1/food-items", ["q", query]],
-  ] as const;
+  const url = new URL("/api/fineli", window.location.origin);
+  url.searchParams.set("q", query);
+  url.searchParams.set("limit", "12");
+  url.searchParams.set("lang", "en");
 
-  for (const [baseUrl, [param, value]] of endpoints) {
-    const url = new URL(baseUrl);
-    url.searchParams.set(param, value);
-    url.searchParams.set("limit", "12");
-    url.searchParams.set("lang", "en");
-
-    try {
-      const response = await fetch(url.toString(), {
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        continue;
-      }
-
-      const payload = (await response.json()) as unknown;
-      const items = Array.isArray(payload)
-        ? payload
-        : Array.isArray((payload as Record<string, unknown>).items)
-          ? ((payload as Record<string, unknown>).items as unknown[])
-          : Array.isArray((payload as Record<string, unknown>).results)
-            ? ((payload as Record<string, unknown>).results as unknown[])
-            : Array.isArray((payload as Record<string, unknown>).data)
-              ? ((payload as Record<string, unknown>).data as unknown[])
-              : [];
-
-      const foods = items
-        .flatMap((item) =>
-          typeof item === "object" && item
-            ? [normalizeFood(item as Record<string, unknown>)]
-            : [],
-        )
-        .filter((item): item is Food => Boolean(item));
-
-      if (foods.length) {
-        return foods;
-      }
-    } catch {
-      continue;
+  try {
+    const response = await fetch(url.toString(), {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      return [];
     }
-  }
 
-  return [];
+    const payload = (await response.json()) as Record<string, unknown>;
+    const items = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload.items)
+        ? payload.items
+        : Array.isArray(payload.results)
+          ? payload.results
+          : Array.isArray(payload.data)
+            ? payload.data
+            : [];
+
+    const foods = items
+      .flatMap((item) =>
+        typeof item === "object" && item
+          ? [normalizeFood(item as Record<string, unknown>)]
+          : [],
+      )
+      .filter((item): item is Food => Boolean(item));
+
+    return foods;
+  } catch {
+    return [];
+  }
 }
 
 export async function searchFineliFoods(query: string) {
@@ -159,6 +229,12 @@ export async function searchFineliFoods(query: string) {
     return [];
   }
 
+  const normalizedQuery = trimmed.toLowerCase();
+  const matches = fallbackFineliFoods.filter((food) => {
+    const haystack = `${food.name} ${food.brand ?? ""}`.toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+
   const networkFoods = await requestCandidates(trimmed);
   if (networkFoods.length) {
     await saveCachedFoodSearch(trimmed, networkFoods);
@@ -166,5 +242,9 @@ export async function searchFineliFoods(query: string) {
   }
 
   const cached = await loadCachedFoodSearch(trimmed);
-  return cached?.foods ?? [];
+  if (cached?.foods?.length) {
+    return cached.foods;
+  }
+
+  return matches.length ? matches : [];
 }

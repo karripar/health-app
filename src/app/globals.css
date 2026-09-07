@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #090b0a;
-  --surface: #111512;
-  --surface-elevated: #171c18;
-  --border: #242b26;
+  --background: #0d110e;
+  --surface: #121814;
+  --surface-elevated: #171d19;
+  --border: rgba(165, 173, 167, 0.18);
   --accent: #39d353;
   --accent-bright: #55e86a;
   --accent-dark: #1b7f35;
   --text-primary: #f2f5f2;
-  --text-secondary: #9aa49d;
-  --text-muted: #626b65;
+  --text-secondary: #a6aea5;
+  --text-muted: #6f7b73;
   --warning: #e5b84b;
   --danger: #e05252;
 }
@@ -34,6 +34,8 @@ body {
   background: var(--background);
   color: var(--text-primary);
   font-family: var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.02em;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -43,7 +45,7 @@ select {
 }
 
 ::selection {
-  background: rgba(57, 211, 83, 0.28);
+  background: rgba(57, 211, 83, 0.24);
 }
 
 .recharts-tooltip-wrapper {

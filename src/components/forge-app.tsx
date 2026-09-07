@@ -25,7 +25,7 @@ import {
   summarizeDay,
   sumNutrition,
 } from "@/lib/forge/calculations";
-import { createIdFactory } from "@/lib/forge/default-data";
+import { createDefaultState, createIdFactory } from "@/lib/forge/default-data";
 import { loadState, saveState } from "@/lib/forge/db";
 import { searchFineliFoods } from "@/lib/forge/fineli";
 import {
@@ -264,15 +264,15 @@ function StatCard({
   helper?: string;
 }) {
   return (
-    <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-      <div className="text-xs uppercase tracking-[0.22em] text-(--text-muted)">
+    <div className="border-t border-(--border) py-3">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
         {label}
       </div>
-      <div className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+      <div className="mt-2 text-2xl font-medium tracking-[-0.05em] text-foreground">
         {value}
       </div>
       {helper ? (
-        <div className="mt-1 text-sm text-(--text-secondary)">{helper}</div>
+        <div className="mt-1 text-xs text-(--text-secondary)">{helper}</div>
       ) : null}
     </div>
   );
@@ -290,16 +290,16 @@ function MacroRow({
   const percentage = Math.min(100, target > 0 ? (value / target) * 100 : 0);
 
   return (
-    <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
+    <div className="border-t border-(--border) py-3">
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="text-(--text-secondary)">{label}</span>
         <span className="text-foreground">
           {roundTo(value)} / {roundTo(target)} g
         </span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/30">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
         <div
-          className="h-full rounded-full bg-(--accent-bright)"
+          className="h-full rounded-full bg-(--accent)"
           style={{ width: `${percentage}%` }}
         />
       </div>
@@ -316,7 +316,7 @@ function Button({
     <button
       {...props}
       type={type}
-      className={`min-h-11 rounded-full border border-(--border) px-4 text-sm font-medium text-foreground transition active:scale-[0.98] ${className}`}
+      className={`min-h-11 rounded-lg border border-(--border) px-3 text-sm font-medium text-foreground transition-colors active:scale-[0.99] ${className}`}
     />
   );
 }
@@ -328,7 +328,7 @@ function Input({
   return (
     <input
       {...props}
-      className={`min-h-11 w-full rounded-2xl border border-(--border) bg-[#0d110e] px-4 text-foreground outline-none placeholder:text-(--text-muted) focus:border-(--accent) ${className}`}
+      className={`min-h-11 w-full rounded-lg border border-(--border) bg-transparent px-3 text-foreground outline-none placeholder:text-(--text-muted) focus:border-(--accent) ${className}`}
     />
   );
 }
@@ -340,7 +340,7 @@ function Select({
   return (
     <select
       {...props}
-      className={`min-h-11 w-full rounded-2xl border border-(--border) bg-[#0d110e] px-4 text-foreground outline-none focus:border-(--accent) ${className}`}
+      className={`min-h-11 w-full rounded-lg border border-(--border) bg-transparent px-3 text-foreground outline-none focus:border-(--accent) ${className}`}
     />
   );
 }
@@ -353,7 +353,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="space-y-2 text-sm text-(--text-secondary)">
+    <label className="block space-y-2 text-xs uppercase tracking-[0.12em] text-(--text-muted)">
       <span>{label}</span>
       {children}
     </label>
@@ -361,7 +361,7 @@ function Field({
 }
 
 export function ForgeApp() {
-  const [state, setState] = useState<ForgeState | null>(null);
+  const [state, setState] = useState<ForgeState>(() => createDefaultState());
   const [activeTab, setActiveTab] = useState<TabKey>("today");
   const [foodQuery, setFoodQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Food[]>([]);
@@ -394,26 +394,58 @@ export function ForgeApp() {
   });
 
   useEffect(() => {
-    void loadState().then((loaded) => {
-      setState(loaded);
-      setSetupForm({
-        name: loaded.profile.name,
-        sex: loaded.profile.sex,
-        age: String(loaded.profile.age),
-        heightCm: String(loaded.profile.heightCm),
-        startWeightKg: loaded.weightEntries[0]
-          ? String(loaded.weightEntries[0].weightKg)
-          : "",
-        targetWeightKg: String(loaded.goal.targetWeightKg),
-        goalType: loaded.goal.type,
-        weeklyRateKg: String(loaded.goal.weeklyRateKg),
-      });
-      setWeightInput(
-        loaded.weightEntries.at(-1)
-          ? String(loaded.weightEntries.at(-1)?.weightKg ?? "")
-          : "",
-      );
-    });
+    let active = true;
+
+    const loadAppState = async () => {
+      try {
+        const loaded = await loadState();
+        if (!active) {
+          return;
+        }
+
+        setState(loaded);
+        setSetupForm({
+          name: loaded.profile.name,
+          sex: loaded.profile.sex,
+          age: String(loaded.profile.age),
+          heightCm: String(loaded.profile.heightCm),
+          startWeightKg: loaded.weightEntries[0]
+            ? String(loaded.weightEntries[0].weightKg)
+            : "",
+          targetWeightKg: String(loaded.goal.targetWeightKg),
+          goalType: loaded.goal.type,
+          weeklyRateKg: String(loaded.goal.weeklyRateKg),
+        });
+        setWeightInput(
+          loaded.weightEntries.at(-1)
+            ? String(loaded.weightEntries.at(-1)?.weightKg ?? "")
+            : "",
+        );
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        const fallback = createDefaultState();
+        setState(fallback);
+        setSetupForm({
+          name: fallback.profile.name,
+          sex: fallback.profile.sex,
+          age: String(fallback.profile.age),
+          heightCm: String(fallback.profile.heightCm),
+          startWeightKg: "",
+          targetWeightKg: String(fallback.goal.targetWeightKg),
+          goalType: fallback.goal.type,
+          weeklyRateKg: String(fallback.goal.weeklyRateKg),
+        });
+        setWeightInput("");
+      }
+    };
+
+    void loadAppState();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -425,30 +457,11 @@ export function ForgeApp() {
 
   const updateState = (updater: (draft: ForgeState) => void) => {
     setState((current) => {
-      if (!current) {
-        return current;
-      }
-
       const draft = structuredClone(current);
       updater(draft);
       return draft;
     });
   };
-
-  if (!state) {
-    return (
-      <div className="min-h-screen bg-background px-4 py-8 text-foreground">
-        <div className="mx-auto max-w-md rounded-3xl border border-(--border) bg-(--surface) p-5">
-          <div className="text-xs uppercase tracking-[0.3em] text-(--text-muted)">
-            FORGE
-          </div>
-          <div className="mt-3 text-2xl font-semibold">
-            Loading your local dashboard...
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const copy = labels[state.settings.language];
   const todayLog = getTodayLog(state);
@@ -603,9 +616,19 @@ export function ForgeApp() {
 
   const handleSearch = async () => {
     const results = await searchFineliFoods(foodQuery);
+    const fallbackUsed = results.some((food) =>
+      food.id.startsWith("fallback-"),
+    );
+
     setSearchResults(results);
     setSelectedFoodId(results[0]?.id ?? "");
-    setSearchMessage(results.length ? copy.noteFineli : copy.fineliFallback);
+    setSearchMessage(
+      results.length
+        ? fallbackUsed
+          ? "Using local fallback results while Fineli is temporarily unavailable."
+          : copy.noteFineli
+        : copy.fineliFallback,
+    );
     if (results.length) {
       updateState((draft) => {
         draft.foods = mergeFoods(draft.foods, results);
@@ -751,11 +774,11 @@ export function ForgeApp() {
   if (!state.settings.hasCompletedOnboarding) {
     return (
       <div className="min-h-screen bg-background px-4 py-6 text-foreground">
-        <div className="mx-auto max-w-md rounded-[2rem] border border-(--border) bg-(--surface) p-5">
-          <div className="text-xs uppercase tracking-[0.3em] text-(--text-muted)">
+        <div className="mx-auto max-w-md pt-10">
+          <div className="text-[10px] uppercase tracking-[0.24em] text-(--text-muted)">
             FORGE
           </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+          <h1 className="mt-3 text-3xl font-medium tracking-[-0.05em]">
             {copy.setupTitle}
           </h1>
           <p className="mt-2 text-sm leading-6 text-(--text-secondary)">
@@ -879,52 +902,54 @@ export function ForgeApp() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-32 pt-5 sm:max-w-4xl sm:px-6 sm:pb-8">
-        <header className="mb-5 flex items-start justify-between gap-4">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-6 sm:max-w-4xl sm:px-6">
+        <header className="mb-6 flex items-end justify-between gap-4 border-b border-(--border) pb-5">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-(--text-muted)">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-(--text-muted)">
               FORGE
             </div>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+            <h1 className="mt-2 text-3xl font-medium tracking-[-0.05em]">
               {copy.todayFocus}
             </h1>
             <p className="mt-1 text-sm text-(--text-secondary)">
               {state.profile.name || "Athlete"}
             </p>
           </div>
-          <div className="rounded-full border border-(--border) px-3 py-2 text-xs uppercase tracking-[0.2em] text-(--accent)">
+          <div className="rounded-md border border-(--border) px-2.5 py-1.5 text-[10px] uppercase tracking-[0.18em] text-(--accent)">
             {todayLog.activity.gymSession ? copy.done : copy.planned}
           </div>
         </header>
 
         {activeTab === "today" ? (
-          <section className="space-y-4">
-            <div className="rounded-[2rem] border border-(--border) bg-[linear-gradient(180deg,#111512_0%,#0d100e_100%)] p-5">
+          <section className="space-y-6">
+            <div className="space-y-5 border-b border-(--border) pb-5">
               <div className="flex items-end justify-between gap-4">
                 <div>
-                  <div className="text-sm text-(--text-secondary)">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
                     {copy.calorieTarget}
                   </div>
-                  <div className="mt-2 text-5xl font-semibold tracking-tight">
+                  <div className="mt-2 text-4xl font-medium tracking-[-0.06em]">
                     {todaySummary.targetCalories.toLocaleString()}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm text-(--text-secondary)">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
                     {copy.remaining}
                   </div>
-                  <div className="mt-2 text-3xl font-semibold text-(--accent)">
+                  <div className="mt-2 text-2xl font-medium tracking-[-0.05em] text-(--accent)">
                     {todaySummary.remainingCalories.toLocaleString()}
                   </div>
                 </div>
               </div>
-              <div className="mt-5 h-3 overflow-hidden rounded-full bg-black/30">
+
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
                 <div
                   className="h-full rounded-full bg-(--accent)"
                   style={{ width: `${calorieProgress}%` }}
                 />
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-2 gap-3">
                 <StatCard
                   label={copy.consumed}
                   value={`${todaySummary.consumedCalories.toLocaleString()}`}
@@ -938,7 +963,7 @@ export function ForgeApp() {
               </div>
             </div>
 
-            <div className="grid gap-3">
+            <div className="space-y-0">
               <MacroRow
                 label={copy.protein}
                 value={todaySummary.macros.protein}
@@ -956,7 +981,7 @@ export function ForgeApp() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-3 border-b border-(--border) pb-5">
               <StatCard
                 label={copy.steps}
                 value={todayLog.activity.steps.toLocaleString()}
@@ -973,25 +998,24 @@ export function ForgeApp() {
               />
             </div>
 
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="grid gap-3 sm:grid-cols-[0.9fr_1.1fr]">
-                <div className="space-y-3">
-                  <div className="text-sm font-medium">{copy.addWeight}</div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={weightInput}
-                      onChange={(event) => setWeightInput(event.target.value)}
-                    />
-                    <Button
-                      className="bg-(--accent) text-black"
-                      onClick={addWeight}
-                    >
-                      {copy.save}
-                    </Button>
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium">{copy.addWeight}</div>
+                <Button
+                  className="bg-(--accent) text-black"
+                  onClick={addWeight}
+                >
+                  {copy.save}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[0.95fr_1.05fr]">
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={weightInput}
+                  onChange={(event) => setWeightInput(event.target.value)}
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <Field label={copy.steps}>
                     <Input
@@ -1026,7 +1050,7 @@ export function ForgeApp() {
                       }
                     />
                   </Field>
-                  <label className="flex min-h-11 items-center gap-3 rounded-2xl border border-(--border) px-4 text-sm text-(--text-secondary)">
+                  <label className="flex min-h-11 items-center gap-2 rounded-lg border border-(--border) px-3 text-xs uppercase tracking-[0.12em] text-(--text-muted)">
                     <input
                       type="checkbox"
                       checked={todayLog.activity.gymSession}
@@ -1040,8 +1064,8 @@ export function ForgeApp() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 flex items-center justify-between">
+            <div className="space-y-3 border-t border-(--border) pt-5">
+              <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">{copy.quickAdd}</div>
                 <Button
                   className="border-(--accent) text-(--accent)"
@@ -1050,7 +1074,7 @@ export function ForgeApp() {
                   {copy.food}
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 {quickFoods.map((food) => (
                   <button
                     key={food.id}
@@ -1058,27 +1082,27 @@ export function ForgeApp() {
                     onClick={() =>
                       addFoodToToday(food, food.defaultServingGrams)
                     }
-                    className="rounded-3xl border border-(--border) bg-(--surface-elevated) p-4 text-left"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-(--border) px-3 py-3 text-left"
                   >
-                    <div className="font-medium">{food.name}</div>
-                    <div className="mt-1 text-sm text-(--text-secondary)">
-                      {food.defaultServingGrams} g
+                    <div>
+                      <div className="font-medium">{food.name}</div>
+                      <div className="mt-1 text-xs text-(--text-secondary)">
+                        {food.defaultServingGrams} g
+                      </div>
                     </div>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">
-                {copy.recentEntries}
-              </div>
-              <div className="space-y-3">
+            <div className="space-y-3 border-t border-(--border) pt-5">
+              <div className="text-sm font-medium">{copy.recentEntries}</div>
+              <div className="space-y-2">
                 {recentEntries.length ? (
                   recentEntries.map(({ entry, food }) => (
                     <div
                       key={entry.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-(--border) bg-(--surface-elevated) px-4 py-3"
+                      className="flex items-center justify-between gap-3 border-b border-(--border) py-2.5"
                     >
                       <div>
                         <div className="font-medium">
@@ -1108,8 +1132,8 @@ export function ForgeApp() {
         ) : null}
 
         {activeTab === "food" ? (
-          <section className="space-y-4">
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
+          <section className="space-y-5">
+            <div className="space-y-3">
               <div className="flex gap-2">
                 <Input
                   value={foodQuery}
@@ -1123,13 +1147,13 @@ export function ForgeApp() {
                   {copy.search}
                 </Button>
               </div>
-              <div className="mt-3 text-sm text-(--text-secondary)">
+              <div className="text-sm text-(--text-secondary)">
                 {searchMessage || copy.noteFineli}
               </div>
             </div>
 
             {selectedFood ? (
-              <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
+              <div className="space-y-4 border-t border-(--border) pt-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-medium">{selectedFood.name}</div>
@@ -1147,7 +1171,7 @@ export function ForgeApp() {
                   />
                 </div>
                 {selectedFoodNutrition ? (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <StatCard
                       label={copy.calories}
                       value={`${selectedFoodNutrition.calories}`}
@@ -1166,7 +1190,7 @@ export function ForgeApp() {
                     />
                   </div>
                 ) : null}
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <Button
                     className="bg-(--accent) text-black"
                     onClick={() =>
@@ -1182,7 +1206,7 @@ export function ForgeApp() {
                   <Button onClick={saveSelectedFood}>{copy.saveFood}</Button>
                 </div>
                 <Button
-                  className="mt-3 w-full"
+                  className="w-full"
                   onClick={() => {
                     addFoodToMealDraft(selectedFood);
                     setShowMealBuilder(true);
@@ -1194,17 +1218,15 @@ export function ForgeApp() {
             ) : null}
 
             {searchResults.length ? (
-              <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-                <div className="mb-3 text-sm font-medium">
-                  {copy.foodSearch}
-                </div>
-                <div className="space-y-3">
+              <div className="space-y-3 border-t border-(--border) pt-5">
+                <div className="text-sm font-medium">{copy.foodSearch}</div>
+                <div className="space-y-2">
                   {searchResults.slice(0, 6).map((food) => (
                     <button
                       key={food.id}
                       type="button"
                       onClick={() => setSelectedFoodId(food.id)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left ${selectedFoodId === food.id ? "border-(--accent) bg-[#0f1511]" : "border-(--border) bg-(--surface-elevated)"}`}
+                      className={`w-full rounded-lg border px-3 py-3 text-left ${selectedFoodId === food.id ? "border-(--accent) bg-white/3" : "border-(--border)"}`}
                     >
                       <div className="font-medium">{food.name}</div>
                       <div className="mt-1 text-sm text-(--text-secondary)">
@@ -1216,13 +1238,13 @@ export function ForgeApp() {
               </div>
             ) : null}
 
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">{copy.savedFoods}</div>
-              <div className="space-y-3">
+            <div className="space-y-3 border-t border-(--border) pt-5">
+              <div className="text-sm font-medium">{copy.savedFoods}</div>
+              <div className="space-y-2">
                 {quickFoods.map((food) => (
                   <div
                     key={food.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-(--border) bg-(--surface-elevated) px-4 py-3"
+                    className="flex items-center justify-between gap-3 border-b border-(--border) py-2.5"
                   >
                     <div>
                       <div className="font-medium">{food.name}</div>
@@ -1242,7 +1264,7 @@ export function ForgeApp() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
+            <div className="space-y-3 border-t border-(--border) pt-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">{copy.customFood}</div>
                 <Button
@@ -1252,7 +1274,7 @@ export function ForgeApp() {
                 </Button>
               </div>
               {showCustomFood ? (
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <Field label={copy.name}>
                     <Input
                       value={customFood.name}
@@ -1316,7 +1338,7 @@ export function ForgeApp() {
               ) : null}
               {showCustomFood ? (
                 <Button
-                  className="mt-4 w-full bg-(--accent) text-black"
+                  className="w-full bg-(--accent) text-black"
                   onClick={addCustomFood}
                 >
                   {copy.save}
@@ -1324,7 +1346,7 @@ export function ForgeApp() {
               ) : null}
             </div>
 
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
+            <div className="space-y-3 border-t border-(--border) pt-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">{copy.meals}</div>
                 <Button
@@ -1334,7 +1356,7 @@ export function ForgeApp() {
                 </Button>
               </div>
               {showMealBuilder ? (
-                <div className="mt-4 space-y-3">
+                <div className="space-y-3">
                   <Field label={copy.mealName}>
                     <Input
                       value={mealName}
@@ -1346,7 +1368,7 @@ export function ForgeApp() {
                     return (
                       <div
                         key={`${item.foodId}-${index}`}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-(--border) bg-(--surface-elevated) px-4 py-3"
+                        className="flex items-center justify-between gap-3 border-b border-(--border) py-2.5"
                       >
                         <div className="font-medium">
                           {food?.name ?? "Food"}
@@ -1379,13 +1401,13 @@ export function ForgeApp() {
                   </Button>
                 </div>
               ) : null}
-              <div className="mt-4 space-y-3">
+              <div className="space-y-2">
                 {state.meals.map((meal) => {
                   const nutrition = mealNutrition(meal, state.foods);
                   return (
                     <div
                       key={meal.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-(--border) bg-(--surface-elevated) px-4 py-3"
+                      className="flex items-center justify-between gap-3 border-b border-(--border) py-2.5"
                     >
                       <div>
                         <div className="font-medium">{meal.name}</div>
@@ -1405,8 +1427,8 @@ export function ForgeApp() {
         ) : null}
 
         {activeTab === "progress" ? (
-          <section className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+          <section className="space-y-6">
+            <div className="grid grid-cols-2 gap-3 border-b border-(--border) pb-5">
               <StatCard
                 label={copy.currentWeight}
                 value={currentWeight ? `${currentWeight.toFixed(1)} kg` : "-"}
@@ -1428,11 +1450,10 @@ export function ForgeApp() {
                 value={etaWeeks ? `${etaWeeks} wk` : "-"}
               />
             </div>
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">
-                {copy.bodyweightTrend}
-              </div>
-              <div className="h-64 w-full">
+
+            <div className="space-y-3 border-b border-(--border) pb-5">
+              <div className="text-sm font-medium">{copy.bodyweightTrend}</div>
+              <div className="h-60 w-full">
                 {weightTrend.length > 1 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={weightTrend}>
@@ -1455,8 +1476,8 @@ export function ForgeApp() {
                       <Tooltip
                         contentStyle={{
                           background: "#111512",
-                          border: "1px solid #242B26",
-                          borderRadius: 16,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          borderRadius: 12,
                         }}
                         labelStyle={{ color: "#9AA49D" }}
                       />
@@ -1483,10 +1504,9 @@ export function ForgeApp() {
                 )}
               </div>
             </div>
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">
-                {copy.adaptiveTdee}
-              </div>
+
+            <div className="space-y-3">
+              <div className="text-sm font-medium">{copy.adaptiveTdee}</div>
               {adaptiveTdee ? (
                 <div className="grid grid-cols-2 gap-3">
                   <StatCard
@@ -1514,9 +1534,9 @@ export function ForgeApp() {
         ) : null}
 
         {activeTab === "more" ? (
-          <section className="space-y-4">
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">{copy.profile}</div>
+          <section className="space-y-6">
+            <div className="space-y-4 border-b border-(--border) pb-5">
+              <div className="text-sm font-medium">{copy.profile}</div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label={copy.name}>
                   <Input
@@ -1596,8 +1616,9 @@ export function ForgeApp() {
                 </Field>
               </div>
             </div>
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">{copy.settings}</div>
+
+            <div className="space-y-3 border-b border-(--border) pb-5">
+              <div className="text-sm font-medium">{copy.settings}</div>
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   className={
@@ -1621,14 +1642,15 @@ export function ForgeApp() {
                 </Button>
               </div>
             </div>
-            <div className="rounded-3xl border border-(--border) bg-(--surface) p-4">
-              <div className="mb-3 text-sm font-medium">{copy.insights}</div>
-              <div className="space-y-3">
+
+            <div className="space-y-3">
+              <div className="text-sm font-medium">{copy.insights}</div>
+              <div className="space-y-2">
                 {insights.length ? (
                   insights.map((insight) => (
                     <div
                       key={insight}
-                      className="rounded-2xl border border-(--border) bg-(--surface-elevated) px-4 py-3 text-sm leading-6 text-(--text-secondary)"
+                      className="border-b border-(--border) py-2.5 text-sm leading-6 text-(--text-secondary)"
                     >
                       {insight}
                     </div>
@@ -1644,14 +1666,14 @@ export function ForgeApp() {
         ) : null}
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-(--border) bg-[rgba(9,11,10,0.96)] px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-(--border) bg-[rgba(10,15,12,0.96)] px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3">
         <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
           {(["today", "food", "progress", "more"] as TabKey[]).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`min-h-11 rounded-2xl px-3 text-sm font-medium transition ${activeTab === tab ? "bg-(--accent) text-black" : "text-(--text-secondary)"}`}
+              className={`min-h-11 rounded-lg px-3 text-sm font-medium transition-colors ${activeTab === tab ? "bg-(--accent) text-black" : "text-(--text-secondary)"}`}
             >
               {copy[tab]}
             </button>
