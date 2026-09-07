@@ -16,6 +16,7 @@ import {
   buildWeightTrend,
   calculateActivityCalories,
   calculateAverageWeeklyChange,
+  calculateBaselineActivityCalories,
   calculateBmr,
   estimateAdaptiveTdee,
   estimateTimeToTarget,
@@ -63,6 +64,25 @@ const labels = {
     quickAdd: "Quick add",
     recentEntries: "Logged today",
     emptyEntries: "No food logged yet.",
+    activityProfile: "Activity profile",
+    averageDailySteps: "Average daily steps",
+    gymSessionsPerWeek: "Gym sessions / week",
+    typicalGymDuration: "Typical gym duration",
+    otherRegularActivity: "Other regular activity",
+    otherActivitySessionsPerWeek: "Other activity sessions / week",
+    otherActivityDuration: "Other activity duration (min)",
+    wasTodayDifferent: "Was today different?",
+    lessActive: "Less active than usual",
+    normalActivity: "Normal",
+    moreActive: "More active than usual",
+    activityToday: "Activity today",
+    gymToday: "Gym today?",
+    yes: "Yes",
+    no: "No",
+    estimatedExpenditure: "Estimated expenditure",
+    basedOnNormalActivity: "Based on your normal activity profile.",
+    activityExplanation:
+      "Your estimated daily expenditure is calculated from your BMR and normal activity profile. As more calorie and weight data accumulates, FORGE compares the estimate against your real-world trend and adjusts it.",
     foodSearch: "Search foods",
     search: "Search",
     addToToday: "Add to today",
@@ -138,6 +158,25 @@ const labels = {
     quickAdd: "Pikalisäys",
     recentEntries: "Merkinnät tänään",
     emptyEntries: "Ruokia ei ole vielä kirjattu.",
+    activityProfile: "Aktiviteettiprofiili",
+    averageDailySteps: "Keskimääräiset askeleet / päivä",
+    gymSessionsPerWeek: "Salit / viikko",
+    typicalGymDuration: "Tavallinen salitunti",
+    otherRegularActivity: "Muu säännöllinen aktiivisuus",
+    otherActivitySessionsPerWeek: "Muun aktiviteetin kerrat / viikko",
+    otherActivityDuration: "Muu aktiviteetti (min)",
+    wasTodayDifferent: "Poikkesiko tämä päivä tavallisuudesta?",
+    lessActive: "Vähemmän aktiivinen kuin normaalisti",
+    normalActivity: "Normaali",
+    moreActive: "Aktiivisempi kuin normaalisti",
+    activityToday: "Aktiivisuus tänään",
+    gymToday: "Onko sali tänään?",
+    yes: "Kyllä",
+    no: "Ei",
+    estimatedExpenditure: "Arvioitu kulutus",
+    basedOnNormalActivity: "Perustuu normaalin aktiivisuusprofiilin mukaan.",
+    activityExplanation:
+      "Arvioitu päivittäinen kulutus lasketaan BMR:n ja normaalin aktiviteettiprofiilin pohjalta. Kun syötyt kalorit ja paino dataa kertyy, FORGE vertaa arviota todelliseen painon kehitykseen ja säätää arvioita.",
     foodSearch: "Hae ruokia",
     search: "Hae",
     addToToday: "Lisää tälle päivälle",
@@ -336,7 +375,7 @@ function Button({
     <button
       {...props}
       type={type}
-      className={`min-h-11 rounded-lg border border-(--border) px-3 text-sm font-medium text-foreground transition-colors active:scale-[0.99] ${className}`}
+      className={`min-h-11 rounded-lg border border-(--border) px-3 text-sm font-medium text-foreground transition-all duration-150 hover:border-(--accent)/80 hover:bg-(--accent)/8 hover:text-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/70 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     />
   );
 }
@@ -387,6 +426,7 @@ export function ForgeApp() {
   const [searchResults, setSearchResults] = useState<Food[]>([]);
   const [selectedFoodId, setSelectedFoodId] = useState("");
   const [selectedFoodGrams, setSelectedFoodGrams] = useState("100");
+  const [isHydrated, setIsHydrated] = useState(false);
   const [searchMessage, setSearchMessage] = useState("");
   const [weightInput, setWeightInput] = useState("");
   const [showCustomFood, setShowCustomFood] = useState(false);
@@ -411,7 +451,17 @@ export function ForgeApp() {
     targetWeightKg: "",
     goalType: "loss",
     weeklyRateKg: "0.35",
+    averageDailySteps: "7000",
+    gymSessionsPerWeek: "3",
+    typicalGymDurationMinutes: "60",
+    otherActivityName: "",
+    otherActivitySessionsPerWeek: "0",
+    otherActivityDurationMinutes: "0",
   });
+  const [statusMessage, setStatusMessage] = useState<{
+    text: string;
+    tone: "success" | "info";
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -435,12 +485,26 @@ export function ForgeApp() {
           targetWeightKg: String(loaded.goal.targetWeightKg),
           goalType: loaded.goal.type,
           weeklyRateKg: String(loaded.goal.weeklyRateKg),
+          averageDailySteps: String(loaded.activityProfile.averageDailySteps),
+          gymSessionsPerWeek: String(loaded.activityProfile.gymSessionsPerWeek),
+          typicalGymDurationMinutes: String(
+            loaded.activityProfile.typicalGymDurationMinutes,
+          ),
+          otherActivityName:
+            loaded.activityProfile.otherActivities[0]?.name ?? "",
+          otherActivitySessionsPerWeek: String(
+            loaded.activityProfile.otherActivities[0]?.sessionsPerWeek ?? 0,
+          ),
+          otherActivityDurationMinutes: String(
+            loaded.activityProfile.otherActivities[0]?.durationMinutes ?? 0,
+          ),
         });
         setWeightInput(
           loaded.weightEntries.at(-1)
             ? String(loaded.weightEntries.at(-1)?.weightKg ?? "")
             : "",
         );
+        setIsHydrated(true);
       } catch {
         if (!active) {
           return;
@@ -457,8 +521,19 @@ export function ForgeApp() {
           targetWeightKg: String(fallback.goal.targetWeightKg),
           goalType: fallback.goal.type,
           weeklyRateKg: String(fallback.goal.weeklyRateKg),
+          averageDailySteps: String(fallback.activityProfile.averageDailySteps),
+          gymSessionsPerWeek: String(
+            fallback.activityProfile.gymSessionsPerWeek,
+          ),
+          typicalGymDurationMinutes: String(
+            fallback.activityProfile.typicalGymDurationMinutes,
+          ),
+          otherActivityName: "",
+          otherActivitySessionsPerWeek: "0",
+          otherActivityDurationMinutes: "0",
         });
         setWeightInput("");
+        setIsHydrated(true);
       }
     };
 
@@ -469,11 +544,30 @@ export function ForgeApp() {
   }, []);
 
   useEffect(() => {
-    if (!state) {
+    if (!isHydrated || !state) {
       return;
     }
     void saveState(state);
-  }, [state]);
+  }, [isHydrated, state]);
+
+  useEffect(() => {
+    if (!statusMessage) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setStatusMessage(null);
+    }, 1800);
+
+    return () => window.clearTimeout(timeout);
+  }, [statusMessage]);
+
+  const announceStatus = (
+    text: string,
+    tone: "success" | "info" = "success",
+  ) => {
+    setStatusMessage({ text, tone });
+  };
 
   const updateState = (updater: (draft: ForgeState) => void) => {
     setState((current) => {
@@ -485,6 +579,13 @@ export function ForgeApp() {
 
   const copy = labels[state.settings.language];
   const todayLog = getTodayLog(state);
+  const todayActivityAdjustment = state.dailyActivityAdjustments.find(
+    (adjustment) => adjustment.date === todayKey(),
+  ) ?? {
+    date: todayKey(),
+    type: "normal" as const,
+    gymToday: undefined,
+  };
   const latestWeight =
     getLatestWeight(state.weightEntries)?.weightKg ?? state.goal.targetWeightKg;
   const todaySummary = summarizeDay({
@@ -493,6 +594,8 @@ export function ForgeApp() {
     profile: state.profile,
     goal: state.goal,
     weightKg: latestWeight,
+    activityProfile: state.activityProfile,
+    dailyAdjustment: todayActivityAdjustment,
   });
   const calorieProgress = Math.max(
     0,
@@ -517,6 +620,9 @@ export function ForgeApp() {
     food: foodsById.get(entry.foodId),
   }));
   const adaptiveTdee = state.tdeeEstimate ?? estimateAdaptiveTdee(state);
+  const baselineTdee =
+    calculateBmr(state.profile, latestWeight) +
+    calculateBaselineActivityCalories(state.activityProfile);
   const averageWeeklyChange = calculateAverageWeeklyChange(state.weightEntries);
   const weightTrend = buildWeightTrend(state.weightEntries);
   const currentWeight = getLatestWeight(state.weightEntries)?.weightKg;
@@ -552,6 +658,17 @@ export function ForgeApp() {
     const age = Number(setupForm.age);
     const heightCm = Number(setupForm.heightCm);
     const weeklyRateKg = Number(setupForm.weeklyRateKg);
+    const averageDailySteps = Number(setupForm.averageDailySteps);
+    const gymSessionsPerWeek = Number(setupForm.gymSessionsPerWeek);
+    const typicalGymDurationMinutes = Number(
+      setupForm.typicalGymDurationMinutes,
+    );
+    const otherActivitySessionsPerWeek = Number(
+      setupForm.otherActivitySessionsPerWeek,
+    );
+    const otherActivityDurationMinutes = Number(
+      setupForm.otherActivityDurationMinutes,
+    );
 
     if (
       !setupForm.name.trim() ||
@@ -559,7 +676,10 @@ export function ForgeApp() {
       !Number.isFinite(targetWeightKg) ||
       !Number.isFinite(age) ||
       !Number.isFinite(heightCm) ||
-      !Number.isFinite(weeklyRateKg)
+      !Number.isFinite(weeklyRateKg) ||
+      !Number.isFinite(averageDailySteps) ||
+      !Number.isFinite(gymSessionsPerWeek) ||
+      !Number.isFinite(typicalGymDurationMinutes)
     ) {
       return;
     }
@@ -572,6 +692,23 @@ export function ForgeApp() {
       draft.goal.type = setupForm.goalType as GoalType;
       draft.goal.targetWeightKg = targetWeightKg;
       draft.goal.weeklyRateKg = weeklyRateKg;
+      draft.activityProfile = {
+        averageDailySteps: Math.max(0, averageDailySteps),
+        gymSessionsPerWeek: Math.min(14, Math.max(0, gymSessionsPerWeek)),
+        typicalGymDurationMinutes: Math.max(0, typicalGymDurationMinutes),
+        otherActivities:
+          setupForm.otherActivityName.trim() &&
+          Number.isFinite(otherActivitySessionsPerWeek) &&
+          Number.isFinite(otherActivityDurationMinutes)
+            ? [
+                {
+                  name: setupForm.otherActivityName.trim(),
+                  sessionsPerWeek: Math.max(0, otherActivitySessionsPerWeek),
+                  durationMinutes: Math.max(0, otherActivityDurationMinutes),
+                },
+              ]
+            : [],
+      };
       draft.settings.hasCompletedOnboarding = true;
       draft.weightEntries = [
         {
@@ -583,7 +720,27 @@ export function ForgeApp() {
       upsertTodayLog(draft, getTodayLog(draft));
       draft.tdeeEstimate = estimateAdaptiveTdee(draft);
     });
+    announceStatus("Setup saved", "success");
     setWeightInput(setupForm.startWeightKg);
+  };
+
+  const setTodayActivityAdjustment = (
+    type: "less" | "normal" | "more",
+    gymToday?: boolean,
+  ) => {
+    updateState((draft) => {
+      draft.dailyActivityAdjustments = [
+        {
+          date: todayKey(),
+          type,
+          gymToday,
+        },
+        ...draft.dailyActivityAdjustments.filter(
+          (adjustment) => adjustment.date !== todayKey(),
+        ),
+      ];
+    });
+    announceStatus("Today's activity updated", "info");
   };
 
   const addFoodToToday = (food: Food, grams: number) => {
@@ -605,6 +762,7 @@ export function ForgeApp() {
       ]);
       draft.tdeeEstimate = estimateAdaptiveTdee(draft);
     });
+    announceStatus(`Added ${food.name}`, "success");
   };
 
   const removeFoodFromToday = (entryId: string) => {
@@ -614,6 +772,7 @@ export function ForgeApp() {
       upsertTodayLog(draft, log);
       draft.tdeeEstimate = estimateAdaptiveTdee(draft);
     });
+    announceStatus("Food removed", "info");
   };
 
   const addWeight = () => {
@@ -630,6 +789,7 @@ export function ForgeApp() {
       });
       draft.tdeeEstimate = estimateAdaptiveTdee(draft);
     });
+    announceStatus("Weight saved", "success");
   };
 
   const updateActivity = (
@@ -641,6 +801,7 @@ export function ForgeApp() {
       log.activity = { ...log.activity, [field]: value };
       upsertTodayLog(draft, log);
     });
+    announceStatus("Today's activity saved", "success");
   };
 
   const handleSearch = async () => {
@@ -679,6 +840,7 @@ export function ForgeApp() {
         },
       ]);
     });
+    announceStatus("Food saved", "success");
   };
 
   const addCustomFood = () => {
@@ -705,6 +867,7 @@ export function ForgeApp() {
         usageCount: 0,
       });
     });
+    announceStatus("Custom food saved", "success");
     setCustomFood({ name: "", calories: "", protein: "", carbs: "", fat: "" });
     setShowCustomFood(false);
   };
@@ -732,6 +895,7 @@ export function ForgeApp() {
         items: mealDraft.map((item) => ({ ...item, id: makeMealItemId() })),
       });
     });
+    announceStatus("Meal saved", "success");
     setMealName("");
     setMealDraft([]);
     setShowMealBuilder(false);
@@ -761,6 +925,7 @@ export function ForgeApp() {
       );
       draft.tdeeEstimate = estimateAdaptiveTdee(draft);
     });
+    announceStatus(`Added meal: ${meal.name}`, "success");
   };
 
   const updateProfile = (
@@ -804,6 +969,15 @@ export function ForgeApp() {
     return (
       <div className="min-h-screen bg-background px-4 py-6 text-foreground">
         <div className="mx-auto max-w-md pt-10">
+          {statusMessage ? (
+            <div
+              className={`mb-4 rounded-lg border px-3 py-2 text-sm ${statusMessage.tone === "success" ? "border-(--accent)/50 bg-(--accent)/10 text-(--accent)" : "border-(--border) bg-white/5 text-foreground"}`}
+              role="status"
+              aria-live="polite"
+            >
+              {statusMessage.text}
+            </div>
+          ) : null}
           <div className="text-[10px] uppercase tracking-[0.24em] text-(--text-muted)">
             FORGE
           </div>
@@ -917,6 +1091,81 @@ export function ForgeApp() {
                 }
               />
             </Field>
+            <Field label={copy.averageDailySteps}>
+              <Input
+                type="number"
+                value={setupForm.averageDailySteps}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    averageDailySteps: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+            <Field label={copy.gymSessionsPerWeek}>
+              <Input
+                type="number"
+                min={0}
+                max={14}
+                value={setupForm.gymSessionsPerWeek}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    gymSessionsPerWeek: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+            <Field label={copy.typicalGymDuration}>
+              <Input
+                type="number"
+                value={setupForm.typicalGymDurationMinutes}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    typicalGymDurationMinutes: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+            <Field label={copy.otherRegularActivity}>
+              <Input
+                value={setupForm.otherActivityName}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    otherActivityName: event.target.value,
+                  }))
+                }
+                placeholder="cycling"
+              />
+            </Field>
+            <Field label={copy.otherActivitySessionsPerWeek}>
+              <Input
+                type="number"
+                min={0}
+                value={setupForm.otherActivitySessionsPerWeek}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    otherActivitySessionsPerWeek: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+            <Field label={copy.otherActivityDuration}>
+              <Input
+                type="number"
+                value={setupForm.otherActivityDurationMinutes}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    otherActivityDurationMinutes: event.target.value,
+                  }))
+                }
+              />
+            </Field>
           </div>
           <Button
             className="mt-6 w-full bg-(--accent) text-black"
@@ -932,6 +1181,15 @@ export function ForgeApp() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-6 sm:max-w-4xl sm:px-6">
+        {statusMessage ? (
+          <div
+            className={`mb-4 rounded-lg border px-3 py-2 text-sm ${statusMessage.tone === "success" ? "border-(--accent)/50 bg-(--accent)/10 text-(--accent)" : "border-(--border) bg-white/5 text-foreground"}`}
+            role="status"
+            aria-live="polite"
+          >
+            {statusMessage.text}
+          </div>
+        ) : null}
         <header className="mb-6 flex items-end justify-between gap-4 border-b border-(--border) pb-5">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em] text-(--text-muted)">
@@ -1022,9 +1280,91 @@ export function ForgeApp() {
               />
               <StatCard
                 label={copy.adaptiveTdee}
-                value={`${roundTo(adaptiveTdee?.value ?? baseBmr * 1.2).toLocaleString()}`}
+                value={`${roundTo(adaptiveTdee?.value ?? baselineTdee).toLocaleString()}`}
                 helper={adaptiveTdee ? adaptiveTdee.confidence : "estimate"}
               />
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-(--border) bg-white/2 p-4">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
+                {copy.estimatedExpenditure}
+              </div>
+              <div className="text-3xl font-medium tracking-[-0.06em]">
+                ~{todaySummary.caloriesBurned.toLocaleString()} kcal
+              </div>
+              <div className="text-sm text-(--text-secondary)">
+                {copy.basedOnNormalActivity}
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t border-(--border) pt-5">
+              <div className="text-sm font-medium">
+                {copy.wasTodayDifferent}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    ["less", copy.lessActive],
+                    ["normal", copy.normalActivity],
+                    ["more", copy.moreActive],
+                  ] as const
+                ).map(([type, label]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    aria-pressed={todayActivityAdjustment.type === type}
+                    onClick={() =>
+                      setTodayActivityAdjustment(
+                        type,
+                        todayActivityAdjustment.gymToday,
+                      )
+                    }
+                    className={`min-h-11 rounded-lg border px-3 text-xs transition-all duration-150 hover:border-(--accent)/80 hover:text-(--accent) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/60 ${todayActivityAdjustment.type === type ? "border-(--accent) bg-(--accent)/10 text-(--accent) shadow-[0_0_0_1px_rgba(255,255,255,0.08)]" : "border-(--border) text-(--text-secondary)"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-(--text-muted)">
+                  {copy.gymToday}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    aria-pressed={todayActivityAdjustment.gymToday === true}
+                    className={
+                      todayActivityAdjustment.gymToday === true
+                        ? "border-(--accent) bg-(--accent)/10 text-(--accent)"
+                        : ""
+                    }
+                    onClick={() =>
+                      setTodayActivityAdjustment(
+                        todayActivityAdjustment.type,
+                        true,
+                      )
+                    }
+                  >
+                    {copy.yes}
+                  </Button>
+                  <Button
+                    aria-pressed={todayActivityAdjustment.gymToday === false}
+                    className={
+                      todayActivityAdjustment.gymToday === false
+                        ? "border-(--accent) bg-(--accent)/10 text-(--accent)"
+                        : ""
+                    }
+                    onClick={() =>
+                      setTodayActivityAdjustment(
+                        todayActivityAdjustment.type,
+                        false,
+                      )
+                    }
+                  >
+                    {copy.no}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -1045,50 +1385,8 @@ export function ForgeApp() {
                   value={weightInput}
                   onChange={(event) => setWeightInput(event.target.value)}
                 />
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label={copy.steps}>
-                    <Input
-                      type="number"
-                      value={todayLog.activity.steps}
-                      onChange={(event) =>
-                        updateActivity("steps", Number(event.target.value))
-                      }
-                    />
-                  </Field>
-                  <Field label={copy.duration}>
-                    <Input
-                      type="number"
-                      value={todayLog.activity.gymDurationMinutes}
-                      onChange={(event) =>
-                        updateActivity(
-                          "gymDurationMinutes",
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label={copy.extraActivity}>
-                    <Input
-                      type="number"
-                      value={todayLog.activity.extraActivityMinutes}
-                      onChange={(event) =>
-                        updateActivity(
-                          "extraActivityMinutes",
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                  </Field>
-                  <label className="flex min-h-11 items-center gap-2 rounded-lg border border-(--border) px-3 text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-                    <input
-                      type="checkbox"
-                      checked={todayLog.activity.gymSession}
-                      onChange={(event) =>
-                        updateActivity("gymSession", event.target.checked)
-                      }
-                    />
-                    {copy.gym}
-                  </label>
+                <div className="rounded-lg border border-(--border) bg-transparent px-3 py-2 text-sm text-(--text-secondary)">
+                  {copy.activityExplanation}
                 </div>
               </div>
             </div>
@@ -1728,6 +2026,125 @@ export function ForgeApp() {
                   />
                 </Field>
               </div>
+            </div>
+
+            <div className="space-y-4 border-b border-(--border) pb-5">
+              <div className="text-sm font-medium">{copy.activityProfile}</div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={copy.averageDailySteps}>
+                  <Input
+                    type="number"
+                    value={state.activityProfile.averageDailySteps}
+                    onChange={(event) =>
+                      updateState((draft) => {
+                        draft.activityProfile.averageDailySteps = Number(
+                          event.target.value,
+                        );
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={copy.gymSessionsPerWeek}>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={14}
+                    value={state.activityProfile.gymSessionsPerWeek}
+                    onChange={(event) =>
+                      updateState((draft) => {
+                        draft.activityProfile.gymSessionsPerWeek = Number(
+                          event.target.value,
+                        );
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={copy.typicalGymDuration}>
+                  <Input
+                    type="number"
+                    value={state.activityProfile.typicalGymDurationMinutes}
+                    onChange={(event) =>
+                      updateState((draft) => {
+                        draft.activityProfile.typicalGymDurationMinutes =
+                          Number(event.target.value);
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={copy.otherRegularActivity}>
+                  <Input
+                    value={state.activityProfile.otherActivities[0]?.name ?? ""}
+                    onChange={(event) =>
+                      updateState((draft) => {
+                        const nextName = event.target.value.trim();
+                        const existing = draft.activityProfile
+                          .otherActivities[0] ?? {
+                          name: "",
+                          sessionsPerWeek: 0,
+                          durationMinutes: 0,
+                        };
+                        draft.activityProfile.otherActivities = nextName
+                          ? [{ ...existing, name: nextName }]
+                          : [];
+                      })
+                    }
+                    placeholder="cycling"
+                  />
+                </Field>
+              </div>
+              {state.activityProfile.otherActivities[0] ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={copy.otherActivitySessionsPerWeek}>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={
+                        state.activityProfile.otherActivities[0].sessionsPerWeek
+                      }
+                      onChange={(event) =>
+                        updateState((draft) => {
+                          const target = draft.activityProfile
+                            .otherActivities[0] ?? {
+                            name: "",
+                            sessionsPerWeek: 0,
+                            durationMinutes: 0,
+                          };
+                          draft.activityProfile.otherActivities = [
+                            {
+                              ...target,
+                              sessionsPerWeek: Number(event.target.value),
+                            },
+                          ];
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label={copy.otherActivityDuration}>
+                    <Input
+                      type="number"
+                      value={
+                        state.activityProfile.otherActivities[0].durationMinutes
+                      }
+                      onChange={(event) =>
+                        updateState((draft) => {
+                          const target = draft.activityProfile
+                            .otherActivities[0] ?? {
+                            name: "",
+                            sessionsPerWeek: 0,
+                            durationMinutes: 0,
+                          };
+                          draft.activityProfile.otherActivities = [
+                            {
+                              ...target,
+                              durationMinutes: Number(event.target.value),
+                            },
+                          ];
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-3 border-b border-(--border) pb-5">

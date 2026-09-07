@@ -66,9 +66,16 @@ export function createDefaultState(): ForgeState {
       },
       hasCompletedOnboarding: false,
     },
+    activityProfile: {
+      averageDailySteps: 7000,
+      gymSessionsPerWeek: 3,
+      typicalGymDurationMinutes: 60,
+      otherActivities: [],
+    },
     foods: starterFoods,
     meals: [],
     dailyLogs: [],
+    dailyActivityAdjustments: [],
     weightEntries: [],
   };
 }

@@ -1,5 +1,7 @@
 import {
   type ActivityEntry,
+  type ActivityProfile,
+  type DailyActivityAdjustment,
   type DailyLog,
   type Food,
   type ForgeState,
@@ -32,6 +34,53 @@ export function calculateActivityCalories(activity: ActivityEntry) {
   const gymCalories = activity.gymSession ? activity.gymDurationMinutes * 6 : 0;
   const extraActivityCalories = activity.extraActivityMinutes * 4;
   return roundTo(stepCalories + gymCalories + extraActivityCalories);
+}
+
+export function calculateBaselineActivityCalories(
+  activityProfile: ActivityProfile,
+) {
+  const stepCalories = activityProfile.averageDailySteps * 0.04;
+  const gymDailyCalories =
+    (activityProfile.gymSessionsPerWeek *
+      activityProfile.typicalGymDurationMinutes *
+      6) /
+    7;
+  const otherDailyCalories = activityProfile.otherActivities.reduce(
+    (total, item) =>
+      total + (item.sessionsPerWeek * item.durationMinutes * 4) / 7,
+    0,
+  );
+
+  return roundTo(stepCalories + gymDailyCalories + otherDailyCalories);
+}
+
+export function calculateExpectedGymDayExpenditure(
+  profile: UserProfile,
+  weightKg: number,
+  activityProfile: ActivityProfile,
+) {
+  const baseBmr = calculateBmr(profile, weightKg);
+  const profileCalories = calculateBaselineActivityCalories(activityProfile);
+  const gymBoost = activityProfile.typicalGymDurationMinutes * 6;
+
+  return roundTo(baseBmr + profileCalories + gymBoost);
+}
+
+export function calculateExpectedRestDayExpenditure(
+  profile: UserProfile,
+  weightKg: number,
+  activityProfile: ActivityProfile,
+) {
+  const baseBmr = calculateBmr(profile, weightKg);
+  const profileCalories = calculateBaselineActivityCalories(activityProfile);
+  const gymReduction =
+    (activityProfile.gymSessionsPerWeek *
+      activityProfile.typicalGymDurationMinutes *
+      6) /
+    7 /
+    2;
+
+  return roundTo(baseBmr + profileCalories - gymReduction);
 }
 
 export function calculateMacroTargets(
@@ -229,6 +278,8 @@ export function summarizeDay(params: {
   profile: UserProfile;
   goal: Goal;
   weightKg: number;
+  activityProfile?: ActivityProfile;
+  dailyAdjustment?: DailyActivityAdjustment;
 }) {
   const foodsById = new Map(params.foods.map((food) => [food.id, food]));
   const macros = sumNutrition(
@@ -237,9 +288,33 @@ export function summarizeDay(params: {
       return food ? [scaleNutrition(food.nutritionPer100g, entry.grams)] : [];
     }),
   );
-  const baseTdee = calculateBmr(params.profile, params.weightKg) * 1.2;
-  const caloriesBurned = calculateActivityCalories(params.log.activity);
-  const expenditure = baseTdee + caloriesBurned;
+
+  const activityProfile = params.activityProfile ?? {
+    averageDailySteps: 7000,
+    gymSessionsPerWeek: 3,
+    typicalGymDurationMinutes: 60,
+    otherActivities: [],
+  };
+
+  const hasManualActivityLog =
+    params.log.activity.steps > 0 ||
+    params.log.activity.gymSession ||
+    params.log.activity.extraActivityMinutes > 0;
+
+  let caloriesBurned = calculateBaselineActivityCalories(activityProfile);
+  if (hasManualActivityLog) {
+    caloriesBurned = calculateActivityCalories(params.log.activity);
+  }
+
+  if (params.dailyAdjustment?.type === "less") {
+    caloriesBurned = roundTo(caloriesBurned * 0.8);
+  }
+  if (params.dailyAdjustment?.type === "more") {
+    caloriesBurned = roundTo(caloriesBurned * 1.15);
+  }
+
+  const expenditure =
+    calculateBmr(params.profile, params.weightKg) + caloriesBurned;
   const targetCalories = calculateCalorieTarget({
     expenditure,
     goal: params.goal,

@@ -63,6 +63,31 @@ export interface ActivityEntry {
   extraActivityMinutes: number;
 }
 
+export interface ActivityProfileItem {
+  name: string;
+  sessionsPerWeek: number;
+  durationMinutes: number;
+}
+
+export interface ActivityProfile {
+  averageDailySteps: number;
+  gymSessionsPerWeek: number;
+  typicalGymDurationMinutes: number;
+  otherActivities: ActivityProfileItem[];
+}
+
+export interface ActivityAdjustment {
+  name: string;
+  minutes: number;
+}
+
+export interface DailyActivityAdjustment {
+  date: string;
+  type: "less" | "normal" | "more";
+  gymToday?: boolean;
+  additionalActivities?: ActivityAdjustment[];
+}
+
 export interface DailyLog {
   date: string;
   foodEntries: FoodEntry[];
@@ -106,9 +131,11 @@ export interface ForgeState {
   profile: UserProfile;
   goal: Goal;
   settings: Settings;
+  activityProfile: ActivityProfile;
   foods: Food[];
   meals: Meal[];
   dailyLogs: DailyLog[];
+  dailyActivityAdjustments: DailyActivityAdjustment[];
   weightEntries: WeightEntry[];
   tdeeEstimate?: TDEEEstimate;
 }

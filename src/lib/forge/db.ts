@@ -8,6 +8,7 @@ const DB_VERSION = 1;
 const APP_STORE = "app-state";
 const FOOD_CACHE_STORE = "food-cache";
 const APP_STATE_KEY = "state";
+const MAX_SEARCH_CACHE_ENTRIES = 75;
 
 interface CachedFoodSearch {
   query: string;
@@ -52,9 +53,18 @@ function normalizeState(state?: ForgeState): ForgeState {
         state.settings?.hasCompletedOnboarding ??
         Boolean(state.weightEntries?.length || state.profile?.name?.trim()),
     },
+    activityProfile: {
+      ...fallback.activityProfile,
+      ...state.activityProfile,
+      otherActivities:
+        state.activityProfile?.otherActivities ??
+        fallback.activityProfile.otherActivities,
+    },
     foods: state.foods?.length ? state.foods : fallback.foods,
     meals: state.meals ?? fallback.meals,
     dailyLogs: state.dailyLogs ?? fallback.dailyLogs,
+    dailyActivityAdjustments:
+      state.dailyActivityAdjustments ?? fallback.dailyActivityAdjustments,
     weightEntries: state.weightEntries ?? fallback.weightEntries,
   };
 }
@@ -66,8 +76,16 @@ export async function loadState() {
 }
 
 export async function saveState(state: ForgeState) {
-  const db = await getDb();
-  await db.put(APP_STORE, state, APP_STATE_KEY);
+  try {
+    const db = await getDb();
+    await db.put(APP_STORE, state, APP_STATE_KEY);
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "QuotaExceededError") {
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function loadCachedFoodSearch(query: string) {
@@ -78,11 +96,36 @@ export async function loadCachedFoodSearch(query: string) {
 }
 
 export async function saveCachedFoodSearch(query: string, foods: Food[]) {
-  const db = await getDb();
-  const record: CachedFoodSearch = {
-    query: query.toLowerCase(),
-    foods,
-    updatedAt: new Date().toISOString(),
-  };
-  await db.put(FOOD_CACHE_STORE, record);
+  try {
+    const db = await getDb();
+    const record: CachedFoodSearch = {
+      query: query.toLowerCase(),
+      foods,
+      updatedAt: new Date().toISOString(),
+    };
+    await db.put(FOOD_CACHE_STORE, record);
+
+    const cachedRecords = await db.getAll(FOOD_CACHE_STORE);
+    if (cachedRecords.length <= MAX_SEARCH_CACHE_ENTRIES) {
+      return;
+    }
+
+    const oldest = cachedRecords
+      .sort(
+        (left, right) =>
+          new Date(left.updatedAt).getTime() -
+          new Date(right.updatedAt).getTime(),
+      )
+      .slice(0, cachedRecords.length - MAX_SEARCH_CACHE_ENTRIES);
+
+    await Promise.all(
+      oldest.map((entry) => db.delete(FOOD_CACHE_STORE, entry.query)),
+    );
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "QuotaExceededError") {
+      return;
+    }
+    throw error;
+  }
 }
