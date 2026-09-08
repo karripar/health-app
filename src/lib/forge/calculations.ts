@@ -156,13 +156,35 @@ export function calculateCalorieTarget(params: {
 
 export function getLatestWeight(weightEntries: WeightEntry[]) {
   return [...weightEntries]
-    .sort((a, b) => a.loggedAt.localeCompare(b.loggedAt))
+    .sort(
+      (a, b) =>
+        getWeightEntryDate(a).localeCompare(getWeightEntryDate(b)) ||
+        a.loggedAt.localeCompare(b.loggedAt),
+    )
     .at(-1);
 }
 
+export function getWeightEntryDate(entry: WeightEntry) {
+  if (entry.date) {
+    return entry.date;
+  }
+
+  const value = new Date(entry.loggedAt);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function getWeightForDate(weightEntries: WeightEntry[], date: string) {
+  return [...weightEntries].find((entry) => getWeightEntryDate(entry) === date);
+}
+
 export function buildWeightTrend(weightEntries: WeightEntry[]) {
-  const sorted = [...weightEntries].sort((a, b) =>
-    a.loggedAt.localeCompare(b.loggedAt),
+  const sorted = [...weightEntries].sort(
+    (a, b) =>
+      getWeightEntryDate(a).localeCompare(getWeightEntryDate(b)) ||
+      a.loggedAt.localeCompare(b.loggedAt),
   );
   if (!sorted.length) {
     return [] as WeightTrendPoint[];
@@ -172,7 +194,7 @@ export function buildWeightTrend(weightEntries: WeightEntry[]) {
   return sorted.map((entry, index) => {
     trend = index === 0 ? entry.weightKg : trend * 0.75 + entry.weightKg * 0.25;
     return {
-      date: entry.loggedAt.slice(0, 10),
+      date: getWeightEntryDate(entry),
       actual: roundTo(entry.weightKg, 1),
       trend: roundTo(trend, 1),
     } satisfies WeightTrendPoint;
@@ -296,13 +318,14 @@ export function summarizeDay(params: {
     otherActivities: [],
   };
 
-  const hasManualActivityLog =
-    params.log.activity.steps > 0 ||
+  const hasMeaningfulManualActivity =
     params.log.activity.gymSession ||
-    params.log.activity.extraActivityMinutes > 0;
+    params.log.activity.extraActivityMinutes > 0 ||
+    params.log.activity.steps >=
+      Math.max(100, activityProfile.averageDailySteps * 0.1);
 
   let caloriesBurned = calculateBaselineActivityCalories(activityProfile);
-  if (hasManualActivityLog) {
+  if (hasMeaningfulManualActivity) {
     caloriesBurned = calculateActivityCalories(params.log.activity);
   }
 

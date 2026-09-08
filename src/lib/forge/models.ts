@@ -92,6 +92,13 @@ export interface DailyLog {
   date: string;
   foodEntries: FoodEntry[];
   activity: ActivityEntry;
+  caloriesConsumed?: number;
+  steps?: number;
+  activityLevel?: "less" | "normal" | "more";
+  gymToday?: boolean;
+  estimatedExpenditure?: number;
+  finalized?: boolean;
+  weightEntryId?: string;
 }
 
 export interface MealItem {
@@ -110,7 +117,9 @@ export interface Meal {
 
 export interface WeightEntry {
   id: string;
+  date?: string;
   weightKg: number;
+  confirmed?: boolean;
   loggedAt: string;
 }
 
